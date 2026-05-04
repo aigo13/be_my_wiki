@@ -1,0 +1,43 @@
+# Virtual environments
+# (The project venv typically lives at ./.venv; this rule keeps it out of git.
+# Some users place venvs outside the repo entirely — that case needs no rule.)
+.venv/
+venv/
+
+# Persistent data and indexes
+data/
+*.db
+*.sqlite
+*.sqlite3
+
+# Real config (do not commit secrets or local paths)
+config.toml
+
+# Python build artefacts
+__pycache__/
+*.py[cod]
+*.egg-info/
+build/
+dist/
+.pytest_cache/
+.ruff_cache/
+
+# uv lockfile is committed; uv cache is not
+.uv-cache/
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# CLAUDE.md
+CLAUDE.md
+.claude/
+logs/
+data/

@@ -1,0 +1,54 @@
+# be_my_wiki configuration
+# Copy this file to `config.toml` and edit the values for your setup.
+
+[vault]
+# Absolute path to your Obsidian vault root.
+path = "/Users/Me/Documents/MyVault"
+
+# Glob patterns to ignore, relative to the vault root.
+ignore = [
+  ".obsidian/**",
+  ".trash/**",
+  "**/node_modules/**",
+  "__raw/**",
+]
+
+[storage]
+# Vector store backend: "chroma" (default) | "qdrant" (planned).
+backend = "chroma"
+
+# Where Chroma persists its data on disk.
+chroma_path = "./data/chroma"
+
+# Logical collection name inside the store.
+collection = "vault"
+
+[embedding]
+# HuggingFace model id. bge-m3 supports 100+ languages and long inputs.
+model = "BAAI/bge-m3"
+
+# "cpu" | "cuda" | "mps". Set "cuda" if you have an NVIDIA GPU.
+device = "cpu"
+
+# Batch size for embedding documents during indexing.
+batch_size = 16
+
+[chunking]
+# Hard cap per chunk (approximate token count).
+max_tokens = 512
+
+# Heading level to split at (e.g., 2 -> split at H2 headings).
+heading_level = 2
+
+[indexer]
+# Debounce window for file change events (seconds).
+debounce_seconds = 2.0
+
+[mcp]
+# Default top_k when the search tool is called without an explicit value.
+default_top_k = 5
+
+# Optional: free-form keywords appended to every MCP tool's description.
+# Helps Claude's tool search match the right server when the user phrases
+# their request in domain-specific terms. Leave empty for generic only.
+# description_hint = "Quantum Computing Theory wiki — algorithms, linear algebra, math notes"

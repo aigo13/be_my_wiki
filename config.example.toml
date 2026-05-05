@@ -28,6 +28,9 @@ collection = "vault"
 model = "BAAI/bge-m3"
 
 # "cpu" | "cuda" | "mps". Set "cuda" if you have an NVIDIA GPU.
+# Applies to bulk indexing (`my-wiki index`) only. The MCP server
+# always uses CPU to avoid cuda DLL cold-start exceeding the stdio
+# tool-call timeout.
 device = "cpu"
 
 # Batch size for embedding documents during indexing.

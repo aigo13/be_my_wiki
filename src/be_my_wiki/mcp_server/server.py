@@ -164,9 +164,11 @@ def create_server(
     port: int = 7777,
 ) -> FastMCP:
     cfg = load_config(config_path)
+    # MCP server forces CPU; cuda DLL import exceeds stdio tool-call timeout
+    # on cold start. Bulk indexing (`my-wiki index`) keeps using cfg device.
     embedder = BgeM3Embedder(
         model_name=cfg.embedding.model,
-        device=cfg.embedding.device,
+        device="cpu",
         batch_size=cfg.embedding.batch_size,
     )
     if cfg.storage.backend != "chroma":

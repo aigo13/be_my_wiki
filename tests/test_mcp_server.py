@@ -304,6 +304,47 @@ def test_description_hint_propagates_to_tool_descriptions(tmp_path, fake_st):
         )
 
 
+def test_create_server_forces_cpu_even_with_cuda_config(
+    tmp_path, fake_st, monkeypatch
+):
+    """MCP server must build the embedder with device='cpu' even when the
+    config says cuda — cuda DLL import on cold start exceeds the MCP stdio
+    tool-call timeout on Windows. Bulk indexing keeps using cfg device.
+    """
+    from be_my_wiki.mcp_server import server as server_module
+
+    captured: dict = {}
+    real_cls = server_module.BgeM3Embedder
+
+    def spy(*args, **kwargs):
+        captured.update(kwargs)
+        return real_cls(*args, **kwargs)
+
+    monkeypatch.setattr(server_module, "BgeM3Embedder", spy)
+
+    vault_dir = tmp_path / "vault"
+    vault_dir.mkdir()
+    cfg_path = tmp_path / "config.toml"
+    cfg_path.write_text(
+        textwrap.dedent(
+            f"""
+            [vault]
+            path = "{vault_dir.as_posix()}"
+
+            [storage]
+            chroma_path = "{(tmp_path / "chroma").as_posix()}"
+            collection = "force_cpu"
+
+            [embedding]
+            device = "cuda"
+            """
+        ),
+        encoding="utf-8",
+    )
+    create_server(cfg_path)
+    assert captured.get("device") == "cpu"
+
+
 def test_create_server_accepts_custom_host_port(tmp_path, fake_st):
     vault_dir = tmp_path / "vault"
     vault_dir.mkdir()

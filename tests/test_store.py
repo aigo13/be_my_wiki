@@ -3,7 +3,7 @@ import uuid
 import pytest
 
 from be_my_wiki.parsing.chunker import Chunk
-from be_my_wiki.store.base import StoreStats, VectorStore
+from be_my_wiki.store.base import ChunkRecord, StoreStats, VectorStore
 from be_my_wiki.store.chroma import ChromaStore
 
 
@@ -303,6 +303,107 @@ def test_korean_content_roundtrip(store):
     assert hits[0].heading_path == ("서론",)
     assert hits[0].metadata["tags"] == ["한국어", "머신러닝"]
     assert hits[0].metadata["title"] == "메모"
+
+
+# --- get_chunks ---
+
+
+def test_get_chunks_all_returns_sorted(store):
+    chunks = [
+        _chunk("a.md", 2, "third"),
+        _chunk("a.md", 0, "first"),
+        _chunk("a.md", 1, "second"),
+        _chunk("b.md", 0, "other"),
+    ]
+    store.upsert(chunks, [[1, 0], [0, 1], [1, 1], [0.5, 0.5]])
+    records = store.get_chunks("a.md")
+    assert [r.chunk_index for r in records] == [0, 1, 2]
+    assert [r.body for r in records] == ["first", "second", "third"]
+    assert all(isinstance(r, ChunkRecord) for r in records)
+    assert all(r.note_path == "a.md" for r in records)
+
+
+def test_get_chunks_specific_indices(store):
+    chunks = [
+        _chunk("a.md", 0, "x"),
+        _chunk("a.md", 1, "y"),
+        _chunk("a.md", 2, "z"),
+    ]
+    store.upsert(chunks, [[1, 0, 0], [0, 1, 0], [0, 0, 1]])
+    records = store.get_chunks("a.md", chunk_indices=[2, 0])
+    assert [r.chunk_index for r in records] == [2, 0]
+    assert [r.body for r in records] == ["z", "x"]
+
+
+def test_get_chunks_missing_index_raises(store):
+    chunks = [_chunk("a.md", 0, "x"), _chunk("a.md", 1, "y")]
+    store.upsert(chunks, [[1, 0], [0, 1]])
+    with pytest.raises(ValueError, match=r"chunk indices not found"):
+        store.get_chunks("a.md", chunk_indices=[0, 99])
+
+
+def test_get_chunks_unindexed_note_returns_empty(store):
+    store.upsert([_chunk("a.md", 0, "x")], [[1.0, 0.0]])
+    assert store.get_chunks("nonexistent.md") == []
+
+
+def test_get_chunks_unindexed_note_with_indices_raises(store):
+    store.upsert([_chunk("a.md", 0, "x")], [[1.0, 0.0]])
+    with pytest.raises(ValueError, match=r"chunk indices not found"):
+        store.get_chunks("nonexistent.md", chunk_indices=[0])
+
+
+def test_get_chunks_empty_indices_list_returns_empty(store):
+    store.upsert([_chunk("a.md", 0, "x")], [[1.0, 0.0]])
+    assert store.get_chunks("a.md", chunk_indices=[]) == []
+
+
+def test_get_chunks_on_empty_store(store):
+    assert store.get_chunks("a.md") == []
+    with pytest.raises(ValueError, match=r"chunk indices not found"):
+        store.get_chunks("a.md", chunk_indices=[0])
+
+
+def test_get_chunks_strips_pushdown_helper_fields(store):
+    chunks = [_chunk("ML/a.md", 0, "x", tags=["ml"])]
+    store.upsert(chunks, [[1.0, 0.0]])
+    records = store.get_chunks("ML/a.md")
+    md = records[0].metadata
+    assert not any(k.startswith("tag__") for k in md)
+    assert not any(k.startswith("dir_lvl") for k in md)
+    assert md["tags"] == ["ml"]
+
+
+def test_get_chunks_korean_and_tex_roundtrip(store):
+    body_ko = "이것은 한글 본문입니다."
+    body_tex = r"$$\int_0^1 x \, dx = \frac{1}{2}$$"
+    chunks = [
+        Chunk(
+            note_path="ko.md",
+            chunk_index=0,
+            text=f"prefix\n\n{body_ko}",
+            body=body_ko,
+            heading_path=("서론",),
+            metadata={"title": "메모", "tags": ["한국어"], "aliases": []},
+            content_hash="ko-h",
+        ),
+        Chunk(
+            note_path="ko.md",
+            chunk_index=1,
+            text=f"prefix\n\n{body_tex}",
+            body=body_tex,
+            heading_path=("적분",),
+            metadata={"title": "메모", "tags": [], "aliases": []},
+            content_hash="tex-h",
+        ),
+    ]
+    store.upsert(chunks, [[1.0, 0.0], [0.0, 1.0]])
+    records = store.get_chunks("ko.md")
+    assert records[0].body == body_ko
+    assert records[0].heading_path == ("서론",)
+    assert records[0].metadata["tags"] == ["한국어"]
+    assert records[1].body == body_tex
+    assert records[1].heading_path == ("적분",)
 
 
 def test_tex_content_roundtrip(store):

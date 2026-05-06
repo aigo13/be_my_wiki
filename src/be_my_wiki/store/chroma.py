@@ -32,7 +32,7 @@ from typing import Any
 import chromadb
 
 from ..parsing.chunker import Chunk
-from .base import SearchHit, StoreStats, Vector
+from .base import ChunkRecord, SearchHit, StoreStats, Vector
 
 
 # Metadata keys whose values are lists. Chroma metadata only accepts
@@ -135,6 +135,54 @@ class ChromaStore:
                 )
             )
         return hits
+
+    def get_chunks(
+        self,
+        note_path: str,
+        chunk_indices: list[int] | None = None,
+    ) -> list[ChunkRecord]:
+        if self._collection.count() == 0:
+            records: list[ChunkRecord] = []
+        else:
+            res = self._collection.get(
+                where={"note_path": note_path},
+                include=["metadatas", "documents"],
+            )
+            metadatas = res.get("metadatas") or []
+            documents = res.get("documents") or []
+
+            records = []
+            for md, doc in zip(metadatas, documents):
+                md_d = _deserialize_metadata(dict(md or {}))
+                md_d = {
+                    k: v
+                    for k, v in md_d.items()
+                    if not (k.startswith("tag__") or k.startswith("dir_lvl"))
+                }
+                np = md_d.pop("note_path", "")
+                ci = int(md_d.pop("chunk_index", 0))
+                hp = tuple(md_d.pop("heading_path", []))
+                records.append(
+                    ChunkRecord(
+                        note_path=np,
+                        chunk_index=ci,
+                        heading_path=hp,
+                        body=doc or "",
+                        metadata=md_d,
+                    )
+                )
+            records.sort(key=lambda r: r.chunk_index)
+
+        if chunk_indices is None:
+            return records
+
+        by_index = {r.chunk_index: r for r in records}
+        missing = [i for i in chunk_indices if i not in by_index]
+        if missing:
+            raise ValueError(
+                f"chunk indices not found in {note_path!r}: {missing}"
+            )
+        return [by_index[i] for i in chunk_indices]
 
     def get_chunk_hashes(self, note_path: str) -> dict[int, str]:
         res = self._collection.get(

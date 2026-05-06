@@ -346,17 +346,23 @@ my-wiki-mcp [--config PATH]
 
 ## MCP surface
 
-The MCP server exposes three tools and one resource template:
+The MCP server exposes four tools and one resource template:
 
 | Kind | Name / URI | Purpose |
 |---|---|---|
-| Tool | `search(query, top_k=5, tags?, path_prefix?)` | Semantic search; returns hits with `vault://` URIs |
-| Tool | `get_note(note_path)` | Metadata + headings outline + URI (no inline body) |
+| Tool | `search(query, top_k=5, tags?, path_prefix?)` | Semantic search; each hit carries the full chunk `body` plus a `vault://` URI |
+| Tool | `get_chunk(note_path, chunk_index)` | Fetch the body of one specific chunk (heading-aware section) — saves tokens vs. reading the whole note |
+| Tool | `get_note(note_path)` | Metadata, headings `outline`, and `chunks` index (chunk_index + heading_path per indexed chunk) — pair with `get_chunk` to drill in |
 | Tool | `stats()` | total_notes, total_chunks, vault_path |
 | Resource | `vault://{note_path}` | Full markdown content of a note |
 
 Path traversal is rejected: the server only reads files inside the
 configured `vault.path`.
+
+> **Token-saving flow**: `search` already returns the matched chunk's
+> full body. For neighbouring/specific chunks, call `get_note` to see
+> the chunk index, then `get_chunk` for just that chunk — no need to
+> fetch the entire note via `vault://`.
 
 ---
 

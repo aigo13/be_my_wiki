@@ -13,6 +13,7 @@ import pytest
 
 from be_my_wiki.indexer.pipeline import Indexer
 from be_my_wiki.mcp_server.server import (
+    _get_chunk_impl,
     _get_note_impl,
     _read_resource_impl,
     _resolve_safe,
@@ -86,7 +87,7 @@ def test_search_impl_returns_hits(vault, setup):
     assert h["uri"] == "vault://n.md"
     assert h["chunk_index"] == 0
     assert h["heading_path"] == ["A"]
-    assert "snippet" in h and "score" in h
+    assert "body" in h and "score" in h
     assert h["title"] == "n"  # filename fallback
     assert h["tags"] == []
 
@@ -153,6 +154,37 @@ def test_get_note_impl_returns_full_metadata(vault, setup):
     assert {"level": 2, "text": "Sub"} in outline
 
 
+def test_get_note_impl_includes_chunks_sorted(vault, setup):
+    _, store, indexer = setup
+    _write(
+        vault,
+        "n.md",
+        "## A\nfirst\n\n## B\nsecond\n\n## C\nthird",
+    )
+    indexer.index_directory()
+
+    info = _get_note_impl(vault, store, "n.md")
+    assert "chunks" in info
+    assert info["chunk_count"] == len(info["chunks"])
+    indices = [c["chunk_index"] for c in info["chunks"]]
+    assert indices == sorted(indices)
+    headings = [c["heading_path"] for c in info["chunks"]]
+    assert ["A"] in headings
+    assert ["B"] in headings
+    assert ["C"] in headings
+    # body is not exposed in the chunks list (token discipline)
+    assert all("body" not in c for c in info["chunks"])
+
+
+def test_get_note_impl_unindexed_note_has_empty_chunks(vault, setup):
+    _, store, _ = setup
+    _write(vault, "n.md", "## A\nbody")
+    # NOT calling indexer.index_directory()
+    info = _get_note_impl(vault, store, "n.md")
+    assert info["chunks"] == []
+    assert info["chunk_count"] == 0
+
+
 def test_get_note_impl_title_falls_back_to_filename(vault, setup):
     _, store, indexer = setup
     _write(vault, "MyNote.md", "## A\nbody")
@@ -177,6 +209,53 @@ def test_get_note_impl_missing_file_raises(vault, setup):
     _, store, _ = setup
     with pytest.raises(FileNotFoundError):
         _get_note_impl(vault, store, "nope.md")
+
+
+# --- _get_chunk_impl ---
+
+
+def test_get_chunk_impl_returns_full_body(vault, setup):
+    _, store, indexer = setup
+    _write(
+        vault,
+        "n.md",
+        "## A\nfirst section body\n\n## B\nsecond section body",
+    )
+    indexer.index_directory()
+
+    info = _get_chunk_impl(store, "n.md", 0)
+    assert info["note_path"] == "n.md"
+    assert info["uri"] == "vault://n.md"
+    assert info["chunk_index"] == 0
+    assert info["heading_path"] == ["A"]
+    assert "first section body" in info["body"]
+
+
+def test_get_chunk_impl_missing_index_raises(vault, setup):
+    _, store, indexer = setup
+    _write(vault, "n.md", "## A\nbody")
+    indexer.index_directory()
+    with pytest.raises(ValueError, match=r"chunk indices not found"):
+        _get_chunk_impl(store, "n.md", 99)
+
+
+def test_get_chunk_impl_missing_note_raises(setup):
+    _, store, _ = setup
+    with pytest.raises(ValueError, match=r"chunk indices not found"):
+        _get_chunk_impl(store, "nonexistent.md", 0)
+
+
+def test_get_chunk_impl_korean_body(vault, setup):
+    _, store, indexer = setup
+    _write(
+        vault,
+        "ko.md",
+        "## 서론\n안녕하세요. 이것은 한글 본문입니다.",
+    )
+    indexer.index_directory()
+    info = _get_chunk_impl(store, "ko.md", 0)
+    assert info["heading_path"] == ["서론"]
+    assert "안녕하세요" in info["body"]
 
 
 # --- _stats_impl ---

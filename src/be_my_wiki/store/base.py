@@ -27,6 +27,15 @@ class SearchHit:
 
 
 @dataclass(frozen=True)
+class ChunkRecord:
+    note_path: str
+    chunk_index: int
+    heading_path: tuple[str, ...]
+    body: str
+    metadata: dict[str, Any]
+
+
+@dataclass(frozen=True)
 class StoreStats:
     total_chunks: int
     total_notes: int
@@ -50,6 +59,12 @@ class VectorStore(Protocol):
         tags: list[str] | None = None,
         path_prefix: str | None = None,
     ) -> list[SearchHit]: ...
+
+    def get_chunks(
+        self,
+        note_path: str,
+        chunk_indices: list[int] | None = None,
+    ) -> list[ChunkRecord]: ...
 
     def get_chunk_hashes(self, note_path: str) -> dict[int, str]: ...
 

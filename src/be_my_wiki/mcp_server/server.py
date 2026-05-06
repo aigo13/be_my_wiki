@@ -71,13 +71,29 @@ def _search_impl(
                 "uri": f"vault://{h.note_path}",
                 "chunk_index": h.chunk_index,
                 "heading_path": list(h.heading_path),
-                "snippet": h.body,
+                "body": h.body,
                 "score": h.score,
                 "title": h.metadata.get("title", ""),
                 "tags": h.metadata.get("tags", []),
             }
             for h in hits
         ]
+    }
+
+
+def _get_chunk_impl(
+    store: VectorStore,
+    note_path: str,
+    chunk_index: int,
+) -> dict[str, Any]:
+    records = store.get_chunks(note_path, chunk_indices=[chunk_index])
+    rec = records[0]
+    return {
+        "note_path": rec.note_path or note_path,
+        "uri": f"vault://{rec.note_path or note_path}",
+        "chunk_index": rec.chunk_index,
+        "heading_path": list(rec.heading_path),
+        "body": rec.body,
     }
 
 
@@ -95,7 +111,12 @@ def _get_note_impl(
     title = str(fm["title"]).strip() if fm.get("title") else abs_path.stem
     tags = _normalize_list(fm.get("tags"))
     aliases = _normalize_list(fm.get("aliases"))
-    chunk_count = len(store.get_chunk_hashes(note_path))
+
+    records = store.get_chunks(note_path)
+    chunks = [
+        {"chunk_index": r.chunk_index, "heading_path": list(r.heading_path)}
+        for r in records
+    ]
 
     outline = [
         {"level": h["level"], "text": h["text"]}
@@ -112,7 +133,8 @@ def _get_note_impl(
         "modified_at": datetime.fromtimestamp(
             stat.st_mtime, tz=timezone.utc
         ).isoformat(),
-        "chunk_count": chunk_count,
+        "chunk_count": len(records),
+        "chunks": chunks,
         "outline": outline,
     }
 
@@ -216,12 +238,33 @@ def create_server(
 
     @mcp.tool(
         description=(
+            "Fetch the full body of a specific chunk in the user's Obsidian "
+            "wiki / vault / knowledge base (be_my_wiki). "
+            "Use after `search` or `get_note` when you need the full text of "
+            "a particular chunk (heading-aware section) WITHOUT reading the "
+            "entire note — saves tokens vs. fetching the vault:// resource. "
+            "`note_path` is the vault-relative path; `chunk_index` matches "
+            "the value returned by `search` (each hit) and `get_note` "
+            "(the chunks list). Raises if the chunk no longer exists "
+            "(e.g. note was re-indexed and chunks renumbered) — caller "
+            "should re-search or re-fetch the outline. "
+            "특정 청크 / 섹션 / '이 청크 전체 내용 줘' 같은 요청에 사용."
+            + hint_suffix
+        )
+    )
+    def get_chunk(note_path: str, chunk_index: int) -> dict[str, Any]:
+        return _get_chunk_impl(store, note_path, chunk_index)
+
+    @mcp.tool(
+        description=(
             "Fetch metadata, headings outline, and a vault:// URI for a single "
             "note in the user's Obsidian wiki / vault / knowledge base "
             "(be_my_wiki). Use after `search` when you need to decide whether "
             "to read full content, or when the user names a specific note. "
             "Returns: title, tags, aliases, size_bytes, modified_at, "
-            "chunk_count, outline (heading tree). Does NOT return full body — "
+            "chunk_count, chunks (chunk_index + heading_path per indexed "
+            "chunk — pair with `get_chunk` to fetch a specific chunk's "
+            "body), outline (heading tree). Does NOT return full body — "
             "fetch the vault:// URI via the resource handler if needed."
             + hint_suffix
         )

@@ -246,7 +246,7 @@ claude mcp list
 ```
 
 Open a new Claude Code session and ask something like *"내 노트에서 X 찾아줘"* —
-Claude should call `mcp__be_my_wiki__search`.
+Claude should call `mcp__be-my-wiki__search` (or `__get_chunk` / `__get_note`).
 
 ### Claude Desktop (MCPB)
 
@@ -278,7 +278,8 @@ Create a directory `mcpb/` next to your repo (or anywhere) with a single
   },
   "tools": [
     {"name": "search", "description": "Semantic search over your vault."},
-    {"name": "get_note", "description": "Note metadata + outline."},
+    {"name": "get_chunk", "description": "Fetch one chunk's full body by (note_path, chunk_index)."},
+    {"name": "get_note", "description": "Note metadata, outline, and chunks index."},
     {"name": "stats", "description": "Index statistics."}
   ]
 }
@@ -395,7 +396,7 @@ configured `vault.path`.
                                               │
                                        VectorStore
                                               │
-                              search / get_note / stats
+                       search / get_chunk / get_note / stats
                                               │
                                    mcp_server (stdio | https)
                                               │

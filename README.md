@@ -246,7 +246,7 @@ claude mcp list
 ```
 
 Open a new Claude Code session and ask something like *"내 노트에서 X 찾아줘"* —
-Claude should call `mcp__be-my-wiki__search` (or `__get_chunk` / `__get_note`).
+Claude should call `mcp__be_my_wiki__search` (or `__get_chunk` / `__get_note`).
 
 ### Claude Desktop (MCPB)
 

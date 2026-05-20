@@ -347,7 +347,7 @@ my-wiki-mcp [--config PATH]
 
 ## MCP surface
 
-The MCP server exposes four tools and one resource template:
+The MCP server exposes six tools and one resource template:
 
 | Kind | Name / URI | Purpose |
 |---|---|---|
@@ -355,6 +355,8 @@ The MCP server exposes four tools and one resource template:
 | Tool | `get_chunk(note_path, chunk_index)` | Fetch the body of one specific chunk (heading-aware section) — saves tokens vs. reading the whole note |
 | Tool | `get_note(note_path)` | Metadata, headings `outline`, and `chunks` index (chunk_index + heading_path per indexed chunk) — pair with `get_chunk` to drill in |
 | Tool | `stats()` | total_notes, total_chunks, vault_path |
+| Tool | `list_pdf_figures(pdf_path)` | List detected figures in a PDF (caption, page, `recommend_format`) — the Desktop-facing twin of the `pdf-fig-extractor` skill. Requires `pymupdf` in the venv |
+| Tool | `extract_pdf_figure(pdf_path, figure_id, out_path, dpi=200)` | Write one figure to a PNG or SVG (format from `out_path` extension) |
 | Resource | `vault://{note_path}` | Full markdown content of a note |
 
 Path traversal is rejected: the server only reads files inside the
@@ -364,6 +366,26 @@ configured `vault.path`.
 > full body. For neighbouring/specific chunks, call `get_note` to see
 > the chunk index, then `get_chunk` for just that chunk — no need to
 > fetch the entire note via `vault://`.
+
+---
+
+## Skills
+
+Companion Claude Code skills ship under `skills/`. Activate one by
+symlinking it into your local `.claude/skills/` (which is gitignored, so
+local-only by design):
+
+```bash
+ln -s ../../skills/pdf-fig-extractor .claude/skills/pdf-fig-extractor
+```
+
+| Skill | Purpose |
+|---|---|
+| `pdf-fig-extractor` | Detect figures in a PDF, save the ones Claude judges relevant to your note as `<abbrev>_fig<N>.png` (or `.svg` for vector figures) in your vault's attachments folder, and embed them. Requires `pymupdf` in the be_my_wiki venv: `uv pip install pymupdf`. |
+
+> **한국어**: `skills/` 아래의 Claude Code 스킬은 위처럼 `.claude/skills/`에
+> 심링크해 활성화합니다. `pdf-fig-extractor`는 PDF의 그림을 탐지해 노트에
+> 들어갈 것만 골라 vault 첨부 폴더에 저장·임베드합니다.
 
 ---
 

@@ -1,6 +1,6 @@
 """MCP stdio server for be_my_wiki.
 
-Exposes three tools and a single resource template over stdio. The server
+Exposes six tools and a single resource template over stdio. The server
 is meant to be launched by an MCP client (Claude Desktop, Claude Code) and
 then driven by an LLM that calls the tools to surface relevant chunks of
 the user's Obsidian vault.
@@ -10,9 +10,14 @@ Tools
 - ``search(query, top_k=5, tags=None, path_prefix=None)``: semantic search
   over the indexed chunks. Returns a list of hits, each with a
   ``vault://`` URI the LLM can dereference for full content.
+- ``get_chunk(note_path, chunk_index)``: full body of one indexed chunk.
 - ``get_note(note_path)``: metadata + headings outline + URI for a note.
   Does NOT return full content; that comes from the resource handler.
 - ``stats()``: index counts and the configured vault path.
+- ``list_pdf_figures(pdf_path)``: figures detected in a PDF (caption,
+  page, recommended format) — for vault ingestion.
+- ``extract_pdf_figure(pdf_path, figure_id, out_path, dpi=200)``: write
+  one figure to an image file (PNG or SVG, per extension).
 
 Resource template
 -----------------
@@ -29,6 +34,9 @@ wires them into FastMCP via decorators.
 from __future__ import annotations
 
 import argparse
+import json
+import subprocess
+import sys
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -176,6 +184,54 @@ def _resolve_safe(vault_root: Path, note_path: str) -> Path:
     return candidate
 
 
+# --- PDF figure extraction ---
+#
+# Thin wrappers over ``skills/pdf-fig-extractor/extract_figures.py`` — the
+# same helper the Claude Code skill uses. Subprocess keeps the script as
+# the single source of truth and isolates PyMuPDF from the server process.
+
+_HELPER_SCRIPT = (
+    Path(__file__).resolve().parents[3]
+    / "skills"
+    / "pdf-fig-extractor"
+    / "extract_figures.py"
+)
+
+
+def _run_pdf_helper(args: list[str]) -> str:
+    if not _HELPER_SCRIPT.is_file():
+        raise FileNotFoundError(
+            f"pdf-fig-extractor helper not found at {_HELPER_SCRIPT}"
+        )
+    proc = subprocess.run(
+        [sys.executable, str(_HELPER_SCRIPT), *args],
+        capture_output=True,
+        text=True,
+    )
+    if proc.returncode != 0:
+        raise RuntimeError(
+            (proc.stderr or proc.stdout).strip()
+            or f"pdf-fig-extractor exited with {proc.returncode}"
+        )
+    return proc.stdout
+
+
+def _list_pdf_figures_impl(pdf_path: str) -> dict[str, Any]:
+    return json.loads(_run_pdf_helper(["list", pdf_path]))
+
+
+def _extract_pdf_figure_impl(
+    pdf_path: str,
+    figure_id: str,
+    out_path: str,
+    dpi: int = 200,
+) -> dict[str, Any]:
+    _run_pdf_helper(
+        ["extract", pdf_path, figure_id, out_path, "--dpi", str(dpi)]
+    )
+    return {"out_path": str(Path(out_path).resolve())}
+
+
 # --- MCP wiring ---
 
 
@@ -283,6 +339,49 @@ def create_server(
     )
     def stats() -> dict[str, Any]:
         return _stats_impl(cfg.vault.path, store)
+
+    @mcp.tool(
+        description=(
+            "List figures detected in a PDF for ingestion into the user's "
+            "Obsidian wiki / vault (be_my_wiki). Use when the user wants to "
+            "add a paper or book PDF to their vault and the resulting note "
+            "should embed actual figure images (not ASCII-art transcriptions "
+            "or paraphrases). `pdf_path` is a filesystem path. Returns "
+            "`abbrev` (filename-derived filename prefix) and a list of "
+            "figures with `id`, `page`, `label`, `number`, `caption`, "
+            "`vector_fraction`, `recommend_format` (png/svg). For each "
+            "figure, decide whether the note you are authoring needs it; "
+            "then call `extract_pdf_figure` for those that belong, saving "
+            "to `<vault-attachments>/<abbrev>_fig<number>.<ext>` and "
+            "embedding with `![[<filename>]]`. PDF의 그림을 vault 노트에 "
+            "임베드할 때 사용."
+            + hint_suffix
+        )
+    )
+    def list_pdf_figures(pdf_path: str) -> dict[str, Any]:
+        return _list_pdf_figures_impl(pdf_path)
+
+    @mcp.tool(
+        description=(
+            "Extract one figure from a PDF to an image file. Use after "
+            "`list_pdf_figures` once you have decided a figure belongs in "
+            "the note. `figure_id` is the `id` field from the list (e.g. "
+            "`fig-3`). `out_path` is the absolute filesystem path the image "
+            "is written to — convention: `<vault-attachments>/<abbrev>_fig"
+            "<number>.<ext>` where ext is `png` or `svg` (matching the "
+            "list's `recommend_format`). PNG is rendered at `dpi`; SVG is "
+            "vector. After extraction, embed in the note as "
+            "`![[<filename>]]`."
+            + hint_suffix
+        )
+    )
+    def extract_pdf_figure(
+        pdf_path: str,
+        figure_id: str,
+        out_path: str,
+        dpi: int = 200,
+    ) -> dict[str, Any]:
+        return _extract_pdf_figure_impl(pdf_path, figure_id, out_path, dpi)
 
     @mcp.resource("vault://{note_path}", mime_type="text/markdown")
     def read_note(note_path: str) -> str:

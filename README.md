@@ -280,7 +280,9 @@ Create a directory `mcpb/` next to your repo (or anywhere) with a single
     {"name": "search", "description": "Semantic search over your vault."},
     {"name": "get_chunk", "description": "Fetch one chunk's full body by (note_path, chunk_index)."},
     {"name": "get_note", "description": "Note metadata, outline, and chunks index."},
-    {"name": "stats", "description": "Index statistics."}
+    {"name": "stats", "description": "Index statistics."},
+    {"name": "list_pdf_figures", "description": "List figures detected in a PDF for vault ingestion."},
+    {"name": "extract_pdf_figure", "description": "Extract one figure from a PDF to a PNG or SVG file."}
   ]
 }
 ```
